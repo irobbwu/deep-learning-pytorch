@@ -2,12 +2,11 @@ import os
 import collections
 import random
 import torch
-from string import punctuation
-import torch
-from torch import nn
-import torch.nn.functional as F
 import numpy as np
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from string import punctuation
+from torch import nn
 
 
 def txt_prepocessing(txt_path):
