@@ -110,7 +110,6 @@ class SeqDataLoader:
 
 def load_corpus(path, batch_size=32, num_steps=35):
     text = ''
-    pun = []
     for i in path:
         txt = txt_prepocessing(i)
         text += txt
@@ -189,22 +188,21 @@ def predict(prefix, num_preds, net, vocab, device=torch.device('cuda')):
     return ''.join([vocab.idx_to_token[i] for i in output]).replace('。', '。\n')
 
 
+def grad_clipping(net, theta):
+    if isinstance(net, nn.Module):
+        params = [p for p in net.parameters() if p.requires_grad]
+    else:
+        params = net.params
+    norm = torch.sqrt(sum(torch.sum((p.grad ** 2)) for p in params))
+    if norm > theta:
+        for param in params:
+            param.grad[:] *= theta / norm
+
 def train_rnn(net, epochs, train_iter, loss, optim,
               state=None, grad_clip_theta=1, device=torch.device('cuda')):
     # 梯度裁剪
-    def grad_clipping(net, theta=grad_clip_theta):
-        if isinstance(net, nn.Module):
-            params = [p for p in net.parameters() if p.requires_grad]
-        else:
-            params = net.params
-        norm = torch.sqrt(sum(torch.sum((p.grad ** 2)) for p in params))
-        if norm > theta:
-            for param in params:
-                param.grad[:] *= theta / norm
-
     loss = loss
     opt = optim
-    state = state
     epochs = epochs
     perplexity = []
 
@@ -214,7 +212,8 @@ def train_rnn(net, epochs, train_iter, loss, optim,
         for X, Y in train_iter:
             y = Y.T.reshape(-1)
             X, y = X.to(device), y.to(device)
-            state = net.begin_state(batch_size=X.shape[0], device=device)
+            if state:
+                state = net.begin_state(batch_size=X.shape[0], device=device)
             y_hat, state = net(X, state)
             # state 是叶子节点，不可以直接设置grad
             state = (state[0].detach(),)
@@ -223,7 +222,7 @@ def train_rnn(net, epochs, train_iter, loss, optim,
 
             opt.zero_grad()
             l.backward()
-            grad_clipping(net)
+            grad_clipping(net, grad_clip_theta)
             opt.step()
         epoch_perplexity = np.exp(np.mean(epoch_loss))
         if (epoch+1)%50==0:
